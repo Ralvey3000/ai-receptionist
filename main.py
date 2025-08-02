@@ -1,11 +1,11 @@
 from fastapi import FastAPI, Request
-import openai
+from openai import OpenAI
 import os
 
 app = FastAPI()
 
-# Load OpenAI API key from Railway environment variables
-openai.api_key = os.getenv("OPENAI_API_KEY")
+# Create OpenAI client using API key from Railway environment variables
+client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 # ✅ Test route to confirm Railway is working
 @app.get("/")
@@ -16,7 +16,7 @@ def root():
 def test_openai():
     try:
         # Quick test to check OpenAI connection
-        response = openai.ChatCompletion.create(
+        response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "Hello, AI receptionist!"}]
         )
@@ -33,7 +33,7 @@ async def chat_endpoint(request: Request):
     data = await request.json()
     user_message = data.get("message", "")
 
-    response = openai.ChatCompletion.create(
+    response = client.chat.completions.create(
         model="gpt-4o-mini",
         messages=[
             {
@@ -46,4 +46,3 @@ async def chat_endpoint(request: Request):
 
     reply = response.choices[0].message["content"]
     return {"reply": reply}
-
