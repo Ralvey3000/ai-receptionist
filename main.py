@@ -22,7 +22,7 @@ def test_openai():
         )
         return {
             "status": "success",
-            "sample_reply": response.choices[0].message["content"]
+            "sample_reply": response.choices[0].message.content
         }
     except Exception as e:
         return {"status": "error", "error": str(e)}
@@ -44,5 +44,6 @@ async def chat_endpoint(request: Request):
         ]
     )
 
-    reply = response.choices[0].message["content"]
+    reply = response.choices[0].message.content
     return {"reply": reply}
+
