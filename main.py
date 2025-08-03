@@ -65,17 +65,17 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.send_json({"type": "response.output_text.delta", "response_id": "greeting", "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"})
     await websocket.send_json({"type": "response.output_text.done", "response_id": "greeting"})
     
-    reply_counter = 0  # Track unique reply IDs
+    reply_counter = 0
     
     try:
         while True:
             caller_message = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_message}")
             
-            # Parse the message for interaction type
+            # Only respond to response_required
             if '"interaction_type":"response_required"' not in caller_message:
                 print("ℹ️ Ignoring update_only event")
-                continue  # Skip partial updates
+                continue
             
             # Generate GPT reply
             gpt_response = client.chat.completions.create(
@@ -88,14 +88,20 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             reply_text = gpt_response.choices[0].message.content
             print(f"🤖 AI reply: {reply_text}")
             
-            # Increment reply ID
+            # Unique response_id
             reply_counter += 1
             reply_id = f"reply_{reply_counter}"
             
-            # Send Retell reply
+            # Send Retell output
             await websocket.send_json({"type": "response.create", "response_id": reply_id})
-            await websocket.send_json({"type": "response.output_text.delta", "response_id": reply_id, "delta": reply_text})
-            await websocket.send_json({"type": "response.output_text.done", "response_id": reply_id})
+            print(f"🔄 Sending: response.create for {reply_id}")
             
+            await websocket.send_json({"type": "response.output_text.delta", "response_id": reply_id, "delta": reply_text})
+            print(f"🔄 Sending: delta for {reply_id}")
+            
+            await websocket.send_json({"type": "response.output_text.done", "response_id": reply_id})
+            print(f"🔄 Sending: done for {reply_id}")
+    
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
+
