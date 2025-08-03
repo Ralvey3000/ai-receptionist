@@ -57,65 +57,55 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
     
-    # Tell Retell session is ready
-    await websocket.send_json({
-        "type": "session.update",
-        "status": "ready"
-    })
+    # Send session ready
+    session_ready = {"type": "session.update", "status": "ready"}
+    print("🔄 Sending:", session_ready)
+    await websocket.send_json(session_ready)
     
-    # Create a new response object for the greeting
-    await websocket.send_json({
-        "type": "response.create",
-        "response_id": "greeting"
-    })
+    # Greeting response
+    greeting_id = "greeting"
+    greeting_create = {"type": "response.create", "response_id": greeting_id}
+    print("🔄 Sending:", greeting_create)
+    await websocket.send_json(greeting_create)
     
-    # Stream greeting text
-    await websocket.send_json({
-        "type": "response.output_text.delta",
-        "response_id": "greeting",
-        "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
-    })
+    greeting_delta = {"type": "response.output_text.delta", "response_id": greeting_id, "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"}
+    print("🔄 Sending:", greeting_delta)
+    await websocket.send_json(greeting_delta)
     
-    # Finish greeting
-    await websocket.send_json({
-        "type": "response.output_text.done",
-        "response_id": "greeting"
-    })
+    greeting_done = {"type": "response.output_text.done", "response_id": greeting_id}
+    print("🔄 Sending:", greeting_done)
+    await websocket.send_json(greeting_done)
     
     try:
         while True:
             caller_input = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_input}")
             
-            # Get GPT reply
             gpt_response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
-                    {"role": "system", "content": "You are a warm, professional receptionist. Keep responses short, natural, friendly, and human-like."},
+                    {"role": "system", "content": "You are a warm, professional receptionist. Keep responses short, natural, and human-like."},
                     {"role": "user", "content": caller_input}
                 ]
             )
             reply = gpt_response.choices[0].message.content
             print(f"🤖 AI reply: {reply}")
             
-            # Create response for GPT reply
-            await websocket.send_json({
-                "type": "response.create",
-                "response_id": "reply"
-            })
+            # Create new response for GPT reply
+            reply_id = "reply"
+            reply_create = {"type": "response.create", "response_id": reply_id}
+            print("🔄 Sending:", reply_create)
+            await websocket.send_json(reply_create)
             
-            # Stream GPT reply
-            await websocket.send_json({
-                "type": "response.output_text.delta",
-                "response_id": "reply",
-                "delta": reply
-            })
+            # Send reply delta
+            reply_delta = {"type": "response.output_text.delta", "response_id": reply_id, "delta": reply}
+            print("🔄 Sending:", reply_delta)
+            await websocket.send_json(reply_delta)
             
-            # Finish GPT reply
-            await websocket.send_json({
-                "type": "response.output_text.done",
-                "response_id": "reply"
-            })
+            # Mark reply done
+            reply_done = {"type": "response.output_text.done", "response_id": reply_id}
+            print("🔄 Sending:", reply_done)
+            await websocket.send_json(reply_done)
+            
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
-
