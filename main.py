@@ -1,4 +1,4 @@
-from fastapi import FastAPI, Request
+from fastapi import FastAPI, Request, WebSocket
 from openai import OpenAI
 import os
 
@@ -15,7 +15,6 @@ def root():
 @app.get("/test")
 def test_openai():
     try:
-        # Quick test to check OpenAI connection
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[{"role": "user", "content": "Hello, AI receptionist!"}]
@@ -27,37 +26,55 @@ def test_openai():
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-# ✅ Chat endpoint for Retell
+# ✅ Chat endpoint (for fallback HTTP POST requests)
 @app.post("/chat")
 async def chat_endpoint(request: Request):
     try:
-        # Log the full incoming request for debugging
         data = await request.json()
-        print("Incoming Retell request:", data)
-
-        # Extract message safely (Retell might send a different field)
+        print("Incoming Retell HTTP request:", data)
         user_message = data.get("message") or data.get("input") or ""
-
+        
         if not user_message:
-            # No message yet? Start with greeting
-            return {"reply": "Hello! Thank you for calling. How may I assist you today?"}
-
-        # Call GPT-4o
+            return {"reply": "Hi there! Thanks for calling. How can I help you today?"}
+        
         response = client.chat.completions.create(
             model="gpt-4o-mini",
             messages=[
-                {
-                    "role": "system",
-                    "content": "You are a professional, friendly legal receptionist. Start every call by warmly greeting the caller and asking their name and phone number."
-                },
+                {"role": "system", "content": "You are a warm, professional receptionist. Sound natural, keep responses short, and make the caller feel comfortable."},
                 {"role": "user", "content": user_message}
             ]
         )
-
         reply = response.choices[0].message.content
         return {"reply": reply}
-
     except Exception as e:
         print("Error in chat endpoint:", str(e))
-        # Always respond with a greeting so Retell doesn't hang up
-        return {"reply": "Hello! Thank you for calling. How may I assist you today?"}
+        return {"reply": "Hi there! Thanks for calling. How can I help you today?"}
+
+# ✅ WebSocket endpoint for Retell Realtime Voice
+@app.websocket("/chat/{call_id}")
+async def websocket_endpoint(websocket: WebSocket, call_id: str):
+    await websocket.accept()
+    print(f"📞 WebSocket connection opened for call {call_id}")
+    
+    # Send an immediate warm greeting to avoid hangup
+    await websocket.send_text("Hi! Thanks for calling. This is your receptionist speaking. How can I help today?")
+    
+    try:
+        while True:
+            caller_input = await websocket.receive_text()
+            print(f"🎤 Caller said: {caller_input}")
+            
+            # Send caller input to GPT for a fast, natural reply
+            gpt_response = client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": "You are a warm, professional receptionist. Respond like a real person: short, natural sentences, small pauses, friendly tone."},
+                    {"role": "user", "content": caller_input}
+                ]
+            )
+            
+            reply = gpt_response.choices[0].message.content
+            print(f"🤖 AI reply: {reply}")
+            await websocket.send_text(reply)
+    except Exception as e:
+        print(f"❌ WebSocket closed for call {call_id}: {e}")
