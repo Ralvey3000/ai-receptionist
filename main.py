@@ -105,10 +105,12 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             
             # Send Retell output with modalities
             await websocket.send_json({
-                "type": "response.create",
-                "response_id": reply_id,
-                "modalities": ["output_audio", "output_text"]
-            })
+    "type": "response.create",
+    "response_id": reply_id,
+    "modalities": ["output_audio"],
+    "instructions": reply_text
+})
+
             print(f"🔄 Sending: response.create for {reply_id}")
             
             await websocket.send_json({
