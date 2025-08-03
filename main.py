@@ -27,7 +27,7 @@ def test_openai():
     except Exception as e:
         return {"status": "error", "error": str(e)}
 
-# ✅ Chat endpoint (fallback HTTP POST requests)
+# ✅ Chat endpoint (for fallback HTTP POST requests)
 @app.post("/chat")
 async def chat_endpoint(request: Request):
     try:
@@ -56,11 +56,17 @@ async def chat_endpoint(request: Request):
 async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
-    
-    # Session ready
-    await websocket.send_json({"type": "session.update", "status": "ready"})
-    
-    # Greeting with instructions
+
+    # 🔄 Send correct session handshake for audio
+    session_update = {
+        "type": "session.update",
+        "modalities": ["output_audio"],  # explicitly tell Retell we will speak
+        "status": "ready"
+    }
+    await websocket.send_json(session_update)
+    print(f"🔄 Sent session.update handshake: {session_update}")
+
+    # 🔊 Send greeting using instructions for voice
     await websocket.send_json({
         "type": "response.create",
         "response_id": "greeting",
@@ -68,28 +74,28 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
         "instructions": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
     })
     print("🔄 Sent greeting (instructions: output_audio)")
-    
+
     reply_counter = 0
-    
+
     try:
         while True:
             caller_message = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_message}")
-            
-            # Listen for ACKs from Retell
+
+            # Log ACKs from Retell
             if '"type":"response.ack"' in caller_message:
                 print(f"✅ Retell ACK received: {caller_message}")
                 continue
-            
+
             # Ignore update_only events
             if '"interaction_type":"update_only"' in caller_message:
                 print("ℹ️ Ignoring update_only event")
                 continue
-            
+
             # Only respond when response_required
             if '"interaction_type":"response_required"' not in caller_message:
                 continue
-            
+
             # Generate GPT reply
             gpt_response = client.chat.completions.create(
                 model="gpt-4o-mini",
@@ -100,19 +106,20 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             )
             reply_text = gpt_response.choices[0].message.content
             print(f"🤖 AI reply: {reply_text}")
-            
+
             # Unique response_id
             reply_counter += 1
             reply_id = f"reply_{reply_counter}"
-            
-            # Send Retell output with instructions only
-            await websocket.send_json({
+
+            # Send GPT reply with audio instructions
+            reply_payload = {
                 "type": "response.create",
                 "response_id": reply_id,
                 "modalities": ["output_audio"],
                 "instructions": reply_text
-            })
-            print(f"🔄 Sent instructions for {reply_id} (output_audio)")
-    
+            }
+            await websocket.send_json(reply_payload)
+            print(f"🔄 Sent instructions for {reply_id}: {reply_payload}")
+
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
