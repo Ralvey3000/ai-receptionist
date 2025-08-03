@@ -57,55 +57,45 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
     
-    # Send session ready
-    session_ready = {"type": "session.update", "status": "ready"}
-    print("🔄 Sending:", session_ready)
-    await websocket.send_json(session_ready)
+    # Session ready
+    await websocket.send_json({"type": "session.update", "status": "ready"})
     
-    # Greeting response
-    greeting_id = "greeting"
-    greeting_create = {"type": "response.create", "response_id": greeting_id}
-    print("🔄 Sending:", greeting_create)
-    await websocket.send_json(greeting_create)
+    # Greeting
+    await websocket.send_json({"type": "response.create", "response_id": "greeting"})
+    await websocket.send_json({"type": "response.output_text.delta", "response_id": "greeting", "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"})
+    await websocket.send_json({"type": "response.output_text.done", "response_id": "greeting"})
     
-    greeting_delta = {"type": "response.output_text.delta", "response_id": greeting_id, "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"}
-    print("🔄 Sending:", greeting_delta)
-    await websocket.send_json(greeting_delta)
-    
-    greeting_done = {"type": "response.output_text.done", "response_id": greeting_id}
-    print("🔄 Sending:", greeting_done)
-    await websocket.send_json(greeting_done)
+    reply_counter = 0  # Track unique reply IDs
     
     try:
         while True:
-            caller_input = await websocket.receive_text()
-            print(f"🎤 Caller said: {caller_input}")
+            caller_message = await websocket.receive_text()
+            print(f"🎤 Caller said: {caller_message}")
             
+            # Parse the message for interaction type
+            if '"interaction_type":"response_required"' not in caller_message:
+                print("ℹ️ Ignoring update_only event")
+                continue  # Skip partial updates
+            
+            # Generate GPT reply
             gpt_response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
                     {"role": "system", "content": "You are a warm, professional receptionist. Keep responses short, natural, and human-like."},
-                    {"role": "user", "content": caller_input}
+                    {"role": "user", "content": caller_message}
                 ]
             )
-            reply = gpt_response.choices[0].message.content
-            print(f"🤖 AI reply: {reply}")
+            reply_text = gpt_response.choices[0].message.content
+            print(f"🤖 AI reply: {reply_text}")
             
-            # Create new response for GPT reply
-            reply_id = "reply"
-            reply_create = {"type": "response.create", "response_id": reply_id}
-            print("🔄 Sending:", reply_create)
-            await websocket.send_json(reply_create)
+            # Increment reply ID
+            reply_counter += 1
+            reply_id = f"reply_{reply_counter}"
             
-            # Send reply delta
-            reply_delta = {"type": "response.output_text.delta", "response_id": reply_id, "delta": reply}
-            print("🔄 Sending:", reply_delta)
-            await websocket.send_json(reply_delta)
-            
-            # Mark reply done
-            reply_done = {"type": "response.output_text.done", "response_id": reply_id}
-            print("🔄 Sending:", reply_done)
-            await websocket.send_json(reply_done)
+            # Send Retell reply
+            await websocket.send_json({"type": "response.create", "response_id": reply_id})
+            await websocket.send_json({"type": "response.output_text.delta", "response_id": reply_id, "delta": reply_text})
+            await websocket.send_json({"type": "response.output_text.done", "response_id": reply_id})
             
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
