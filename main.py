@@ -57,16 +57,20 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
     
-    # Step 1: Send session ready event so Retell knows to start audio
+    # Send session ready event
     await websocket.send_json({
         "type": "session.update",
         "status": "ready"
     })
     
-    # Step 2: Send immediate greeting
+    # Send greeting as delta + done
+    greeting = "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
     await websocket.send_json({
-        "type": "response.output_text",
-        "text": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
+        "type": "response.output_text.delta",
+        "delta": greeting
+    })
+    await websocket.send_json({
+        "type": "response.output_text.done"
     })
     
     try:
@@ -85,10 +89,13 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             reply = gpt_response.choices[0].message.content
             print(f"🤖 AI reply: {reply}")
             
-            # Send GPT reply to Retell in correct voice output format
+            # Send GPT reply as delta + done
             await websocket.send_json({
-                "type": "response.output_text",
-                "text": reply
+                "type": "response.output_text.delta",
+                "delta": reply
+            })
+            await websocket.send_json({
+                "type": "response.output_text.done"
             })
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
