@@ -60,14 +60,14 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     # Session ready
     await websocket.send_json({"type": "session.update", "status": "ready"})
     
-    # Greeting using instructions + output_audio
+    # Greeting with instructions
     await websocket.send_json({
         "type": "response.create",
         "response_id": "greeting",
         "modalities": ["output_audio"],
         "instructions": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
     })
-    print("🔄 Sent greeting with instructions for audio")
+    print("🔄 Sent greeting (instructions: output_audio)")
     
     reply_counter = 0
     
@@ -76,9 +76,18 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             caller_message = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_message}")
             
-            # Only respond to response_required
-            if '"interaction_type":"response_required"' not in caller_message:
+            # Listen for ACKs from Retell
+            if '"type":"response.ack"' in caller_message:
+                print(f"✅ Retell ACK received: {caller_message}")
+                continue
+            
+            # Ignore update_only events
+            if '"interaction_type":"update_only"' in caller_message:
                 print("ℹ️ Ignoring update_only event")
+                continue
+            
+            # Only respond when response_required
+            if '"interaction_type":"response_required"' not in caller_message:
                 continue
             
             # Generate GPT reply
@@ -92,7 +101,7 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             reply_text = gpt_response.choices[0].message.content
             print(f"🤖 AI reply: {reply_text}")
             
-            # Unique response_id for each reply
+            # Unique response_id
             reply_counter += 1
             reply_id = f"reply_{reply_counter}"
             
@@ -103,8 +112,7 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
                 "modalities": ["output_audio"],
                 "instructions": reply_text
             })
-            print(f"🔄 Sent instructions for {reply_id}")
+            print(f"🔄 Sent instructions for {reply_id} (output_audio)")
     
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
-
