@@ -60,20 +60,29 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     # 🔄 Send correct session handshake for audio
     session_update = {
         "type": "session.update",
-        "modalities": ["output_audio"],  # explicitly tell Retell we will speak
+        "modalities": ["output_audio", "output_text"],  # Add both
         "status": "ready"
     }
     await websocket.send_json(session_update)
     print(f"🔄 Sent session.update handshake: {session_update}")
 
-    # 🔊 Send greeting using instructions for voice
+    # 🔊 Send greeting (response.create + delta + done)
+    greeting_id = "greeting"
     await websocket.send_json({
         "type": "response.create",
-        "response_id": "greeting",
-        "modalities": ["output_audio"],
-        "instructions": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
+        "response_id": greeting_id,
+        "modalities": ["output_audio"]
     })
-    print("🔄 Sent greeting (instructions: output_audio)")
+    await websocket.send_json({
+        "type": "response.output_text.delta",
+        "response_id": greeting_id,
+        "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
+    })
+    await websocket.send_json({
+        "type": "response.output_text.done",
+        "response_id": greeting_id
+    })
+    print("🔄 Sent greeting sequence")
 
     reply_counter = 0
 
@@ -82,17 +91,12 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             caller_message = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_message}")
 
-            # Log ACKs from Retell
-            if '"type":"response.ack"' in caller_message:
-                print(f"✅ Retell ACK received: {caller_message}")
-                continue
-
             # Ignore update_only events
             if '"interaction_type":"update_only"' in caller_message:
                 print("ℹ️ Ignoring update_only event")
                 continue
 
-            # Only respond when response_required
+            # Only respond to response_required
             if '"interaction_type":"response_required"' not in caller_message:
                 continue
 
@@ -111,15 +115,23 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             reply_counter += 1
             reply_id = f"reply_{reply_counter}"
 
-            # Send GPT reply with audio instructions
-            reply_payload = {
+            # Send GPT reply (response.create + delta + done)
+            await websocket.send_json({
                 "type": "response.create",
                 "response_id": reply_id,
-                "modalities": ["output_audio"],
-                "instructions": reply_text
-            }
-            await websocket.send_json(reply_payload)
-            print(f"🔄 Sent instructions for {reply_id}: {reply_payload}")
+                "modalities": ["output_audio"]
+            })
+            await websocket.send_json({
+                "type": "response.output_text.delta",
+                "response_id": reply_id,
+                "delta": reply_text
+            })
+            await websocket.send_json({
+                "type": "response.output_text.done",
+                "response_id": reply_id
+            })
+            print(f"🔄 Sent reply sequence for {reply_id}")
 
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
+
