@@ -56,15 +56,17 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
     
-    # Send an immediate warm greeting to avoid hangup
-    await websocket.send_text("Hi! Thanks for calling. This is your receptionist speaking. How can I help today?")
+    # Send immediate greeting in JSON format for Retell to speak
+    await websocket.send_json({
+        "type": "response",
+        "text": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
+    })
     
     try:
         while True:
             caller_input = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_input}")
             
-            # Send caller input to GPT for a fast, natural reply
             gpt_response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
@@ -75,6 +77,11 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             
             reply = gpt_response.choices[0].message.content
             print(f"🤖 AI reply: {reply}")
-            await websocket.send_text(reply)
+            
+            # Send JSON so Retell can convert to speech
+            await websocket.send_json({
+                "type": "response",
+                "text": reply
+            })
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
