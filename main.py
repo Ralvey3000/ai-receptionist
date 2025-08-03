@@ -56,7 +56,13 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
     
-    # Send immediate greeting in Retell's expected output format
+    # Step 1: Send session ready event so Retell knows to start audio
+    await websocket.send_json({
+        "type": "session.update",
+        "status": "ready"
+    })
+    
+    # Step 2: Send immediate greeting
     await websocket.send_json({
         "type": "output_text",
         "text": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
@@ -67,7 +73,6 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             caller_input = await websocket.receive_text()
             print(f"🎤 Caller said: {caller_input}")
             
-            # Send caller input to GPT for a fast, natural reply
             gpt_response = client.chat.completions.create(
                 model="gpt-4o-mini",
                 messages=[
