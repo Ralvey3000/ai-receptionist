@@ -60,21 +60,14 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     # Session ready
     await websocket.send_json({"type": "session.update", "status": "ready"})
     
-    # Greeting with modalities
+    # Greeting using instructions + output_audio
     await websocket.send_json({
         "type": "response.create",
         "response_id": "greeting",
-        "modalities": ["output_audio", "output_text"]
+        "modalities": ["output_audio"],
+        "instructions": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
     })
-    await websocket.send_json({
-        "type": "response.output_text.delta",
-        "response_id": "greeting",
-        "delta": "Hi! Thanks for calling. This is your receptionist speaking. How can I help today?"
-    })
-    await websocket.send_json({
-        "type": "response.output_text.done",
-        "response_id": "greeting"
-    })
+    print("🔄 Sent greeting with instructions for audio")
     
     reply_counter = 0
     
@@ -103,28 +96,15 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             reply_counter += 1
             reply_id = f"reply_{reply_counter}"
             
-            # Send Retell output with modalities
+            # Send Retell output with instructions only
             await websocket.send_json({
-    "type": "response.create",
-    "response_id": reply_id,
-    "modalities": ["output_audio"],
-    "instructions": reply_text
-})
-
-            print(f"🔄 Sending: response.create for {reply_id}")
-            
-            await websocket.send_json({
-                "type": "response.output_text.delta",
+                "type": "response.create",
                 "response_id": reply_id,
-                "delta": reply_text
+                "modalities": ["output_audio"],
+                "instructions": reply_text
             })
-            print(f"🔄 Sending: delta for {reply_id}")
-            
-            await websocket.send_json({
-                "type": "response.output_text.done",
-                "response_id": reply_id
-            })
-            print(f"🔄 Sending: done for {reply_id}")
+            print(f"🔄 Sent instructions for {reply_id}")
     
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
+
