@@ -1,6 +1,6 @@
 from fastapi import FastAPI, Request, WebSocket
 from openai import OpenAI
-import os
+import os, asyncio
 
 app = FastAPI()
 client = OpenAI(api_key=os.getenv("OPENAI_API_KEY"))
@@ -43,13 +43,13 @@ async def chat_endpoint(request: Request):
         print("Error in chat endpoint:", str(e))
         return {"reply": "Hi there! Thanks for calling. How can I help you today?"}
 
-# WebSocket for Retell Custom LLM Voice: use delta format
+# WebSocket for Retell Custom LLM Voice: delta format
 @app.websocket("/chat/{call_id}")
 async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.accept()
     print(f"📞 WebSocket connection opened for call {call_id}")
 
-    # Session handshake: include audio (and text for compatibility)
+    # Session handshake: include audio + text
     session_update = {
         "type": "session.update",
         "modalities": ["output_audio", "output_text"],
@@ -58,35 +58,15 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
     await websocket.send_json(session_update)
     print(f"🔄 Sent session.update handshake: {session_update}")
 
-    # Send greeting using delta flow
-    greeting_id = "greeting"
-    await websocket.send_json({
-        "type": "response.create",
-        "response_id": greeting_id,
-        "modalities": ["output_audio", "output_text"]
-    })
-    await websocket.send_json({
-        "type": "response.output_text.delta",
-        "response_id": greeting_id,
-        "delta": "Hi! Thanks for calling. This is your receptionist. How can I help today?"
-    })
-    await websocket.send_json({
-        "type": "response.output_text.done",
-        "response_id": greeting_id
-    })
-    print("🔄 Sent greeting sequence")
-
     reply_counter = 0
 
     try:
         while True:
-            # Retell sends JSON-as-text frames; we log raw to keep it simple
             caller_message = await websocket.receive_text()
             print(f"🎤 Incoming frame: {caller_message}")
 
-            # Only respond when Retell flags response_required
+            # Only reply when response_required
             if '"interaction_type":"response_required"' not in caller_message:
-                # Ignore partial/update_only frames etc.
                 continue
 
             # Generate reply with OpenAI
@@ -103,12 +83,15 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             reply_counter += 1
             reply_id = f"reply_{reply_counter}"
 
-            # Delta sequence for Retell to synthesize voice
+            # Create response with both modalities
             await websocket.send_json({
                 "type": "response.create",
                 "response_id": reply_id,
                 "modalities": ["output_audio", "output_text"]
             })
+            await asyncio.sleep(0.05)  # tiny pause to let stream init
+
+            # Send delta & done
             await websocket.send_json({
                 "type": "response.output_text.delta",
                 "response_id": reply_id,
@@ -120,12 +103,7 @@ async def websocket_endpoint(websocket: WebSocket, call_id: str):
             })
             print(f"🔄 Sent delta sequence for {reply_id}")
 
-            # Optional: explicitly end the agent turn
-            await websocket.send_json({
-                "type": "turn.end",
-                "turn_type": "agent_turn"
-            })
-            print("🔚 Sent turn.end for agent_turn")
+            # (Skip turn.end for now — can re-enable later if stable)
 
     except Exception as e:
         print(f"❌ WebSocket closed for call {call_id}: {e}")
